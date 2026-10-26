@@ -1,72 +1,50 @@
-package application;
+package cpusim;
 
-import java.util.Scanner;
+import cpusim.generator.IProcessGenerator;
+import cpusim.generator.ProcessGeneratorConfig;
+import cpusim.generator.RandomProcessGenerator;
+import cpusim.metrics.AveragingMetricsCollector;
+import cpusim.metrics.MetricsCalculator;
+import cpusim.runner.DefaultSimulationRunnerFactory;
+import cpusim.runner.SimulationApplication;
+import cpusim.runner.SimulationConfig;
+import cpusim.strategy.FCFSStrategy;
+import cpusim.strategy.MLFQStrategy;
+import cpusim.strategy.RRStrategy;
+import cpusim.strategy.SRTFStrategy;
+import cpusim.strategy.SchedulingStrategyRegistry;
+import cpusim.ui.ConsoleUI;
 
-//Eyas Shalhoub
-//1201681
-//OS project that simulates some CPU scheduling methods
+import java.util.Random;
 
-public class Main  {
+/**
+ * Composition root: the only place that knows concrete types and wires them together.
+ * Optional argument: a {@code long} seed for reproducible runs.
+ */
+public final class Main {
 
-	public static void main(String[] args) {
+    private Main() { }
 
-		Scheduler cpu = null;
-		double ATT=0;
-		double AWT=0;
+    public static void main(String[] args) {
+        Random random = args.length > 0 ? new Random(Long.parseLong(args[0])) : new Random();
 
-		Scanner scan= new Scanner(System.in);
-		String choice="";
-		while(true) {
-			cpu=null;
-			ATT=0;
-			AWT=0;
-			System.out.println("Chose Algorim to schedule an 8 random burst time processes:");
-			System.out.println("1-SRTF");
-			System.out.println("2-FCFS");
-			System.out.println("3-RR");
-			System.out.println("4-MLFBQ");
-			System.out.println("Anything else will close the app");		
-			choice=scan.next();
-			System.out.println("\tATT\t"+"\t\tAWT");
+        // To add an algorithm, add one register(...) line here. Nothing else changes.
+        SchedulingStrategyRegistry registry = new SchedulingStrategyRegistry()
+                .register("srtf", SRTFStrategy::new)
+                .register("fcfs", FCFSStrategy::new)
+                .register("rr", () -> new RRStrategy(20))
+                .register("mlfq", MLFQStrategy::new);
 
-			for ( int i=0;i<100000;i++) {
-				if(choice.equals("1"))
-					cpu = new SRTF();
-				else if(choice.equals("2"))
-					cpu=new FCFS();
-				else if(choice.equals("3"))
-					cpu=new RR(20);
-				else if(choice.equals("4"))
-					cpu=new MultilevelFeedbackQueues();
-				else {
-					scan.close();
-					System.exit(0);
-				}
+        IProcessGenerator generator = new RandomProcessGenerator(ProcessGeneratorConfig.defaults(), random);
+        ConsoleUI ui = new ConsoleUI(System.in, System.out);
 
-				cpu.exec();
-				ATT=ATT+cpu.ATT();
-				AWT=AWT+cpu.AWT();
-				if(i==99) {
-					System.out.print("100:\t"+ATT/100);
-					System.out.println("\t100:\t"+AWT/100);
-				}else if(i==999) {
-					System.out.print("1000:\t"+ATT/1000);
-					System.out.println("\t1000:\t"+AWT/1000);
-				}
-				else if(i==9999) {
-					System.out.print("10k:\t"+ATT/10000);
-					System.out.println("\t10k:\t"+AWT/10000);
-				}
-				if(i!=99999)
-					cpu=null;
-			}
-			System.out.print("100k:\t"+ATT/100000);
-			System.out.println("\t100k:\t"+AWT/100000);
-			System.out.println();		
-		
-			
-		}
-
-
-	}
+        new SimulationApplication(
+                ui,
+                registry,
+                registry,
+                new DefaultSimulationRunnerFactory(
+                        generator, new MetricsCalculator(), AveragingMetricsCollector::new, SimulationConfig.defaults()),
+                ui
+        ).run();
+    }
 }
